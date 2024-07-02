@@ -8,6 +8,7 @@ import cofh.core.util.helpers.StringHelper;
 import cofh.thermalexpansion.ThermalExpansion;
 import cofh.thermalfoundation.init.TFEquipment.ToolSetVanilla;
 import cofh.thermalfoundation.item.ItemMaterial;
+import it.unimi.dsi.fastutil.objects.Object2BooleanOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import net.minecraft.init.Items;
 import net.minecraft.item.ItemStack;
@@ -16,10 +17,14 @@ import net.minecraftforge.oredict.OreDictionary;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import javax.annotation.Nullable;
+
 public class PulverizerManager {
 
 	private static Map<ComparableItemStackValidated, PulverizerRecipe> recipeMap = new Object2ObjectOpenHashMap<>();
 	private static OreValidator oreValidator = new OreValidator();
+	
+	private static Map<ComparableItemStack, Boolean> oreOverrideMap = new Object2BooleanOpenHashMap<ComparableItemStack>(); // Unvalidated because less overhead and people would want to add whole OreDict entries outside of ores
 
 	static {
 		oreValidator.addPrefix(ComparableItemStack.ORE);
@@ -233,10 +238,51 @@ public class PulverizerManager {
 	}
 
 	public static boolean isOre(ItemStack stack) {
+		ComparableItemStack query = new ComparableItemStack(stack);
+		if(oreOverrideMap.containsKey(query)) return oreOverrideMap.get(query);
+		query.metadata = OreDictionary.WILDCARD_VALUE;
+		if(oreOverrideMap.containsKey(query)) return oreOverrideMap.get(query);
 
 		return ItemHelper.isOre(stack) || ItemHelper.isCluster(stack);
 	}
 
+	/* ORE OVERRIDES */
+	@Nullable
+	/**
+	 * Adds an override for an {@code ItemStack} to be in the set of ores accepted by the Tectonic Initiator
+	 * @param stack	The {@code ItemStack} to add the override for. Can use {@link OreDictionary.WILDCARD_VALUE wildcard metadata}.
+	 * @param value The override value
+	 * @return The previous value associated with {@code stack}, or {@code null} if there was no mapping for {@code stack}.
+	 * @see Map#put(Object, Object)
+	 */
+	public static Boolean addOreOverride(ItemStack stack, boolean value) {
+		ComparableItemStack query = new ComparableItemStack(stack);
+		return oreOverrideMap.put(query, value);
+	}
+
+	@Nullable
+	/**
+	 * Removes the override for an {@code ItemStack} in the set of ores accepted by the Tectonic Initiator
+	 * @param stack	The {@code ItemStack} to remove the override for. Can use {@link OreDictionary.WILDCARD_VALUE wildcard metadata}.
+	 * @return Whether the remove operation was successful.
+	 * @see Map#remove(Object, Object)
+	 */
+	public static Boolean removeOreOverride(ItemStack stack) {
+		ComparableItemStack query = new ComparableItemStack(stack);
+		return oreOverrideMap.remove(query);
+	}
+
+	/**
+	 * Checks if there is any override for an {@code ItemStack} for the Tectonic Initiator
+	 * @param stack	The {@code ItemStack} to remove the override for. Can use {@link OreDictionary.WILDCARD_VALUE wildcard metadata}.
+	 * @return {@code true} if there is an override for {@code stack}.
+	 * @see Map#containsKey(Object, Object)
+	 */
+	public static boolean hasOreOverride(ItemStack stack) {
+		ComparableItemStack query = new ComparableItemStack(stack);
+		return oreOverrideMap.containsKey(query);
+	}
+	
 	/* RECIPE CLASS */
 	public static class PulverizerRecipe {
 

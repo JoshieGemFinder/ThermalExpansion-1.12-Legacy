@@ -5,6 +5,7 @@ import cofh.core.inventory.ComparableItemStackValidated;
 import cofh.core.inventory.OreValidator;
 import cofh.core.util.helpers.ItemHelper;
 import cofh.thermalexpansion.util.parsers.ConstantParser;
+import it.unimi.dsi.fastutil.objects.Object2BooleanOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import net.minecraft.item.ItemFood;
@@ -16,11 +17,16 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import javax.annotation.Nullable;
+
 public class FurnaceManager {
 
 	private static Map<ComparableItemStackValidated, FurnaceRecipe> recipeMap = new Object2ObjectOpenHashMap<>();
 	private static Map<ComparableItemStackValidated, FurnaceRecipe> recipeMapPyrolysis = new Object2ObjectOpenHashMap<>();
+	private static Map<ComparableItemStack, Boolean> oreOverrideMap = new Object2BooleanOpenHashMap<ComparableItemStack>(); // Went with unvalidated because less overhead and also I expect someone would want to add a whole OreDict entry/entries that aren't ore or dust.
+	private static Map<ComparableItemStackValidated, Boolean> foodOverrideMap = new Object2BooleanOpenHashMap<ComparableItemStackValidated>(); // Seperate from foodSet because foodSet gets reset in reload(). Validated just to reduce overhead with the isFood check (ew, inconsistency with all the other overrides).
 	private static Set<ComparableItemStackValidated> foodSet = new ObjectOpenHashSet<>();
+	
 	private static OreValidator oreValidator = new OreValidator();
 
 	static {
@@ -173,7 +179,7 @@ public class FurnaceManager {
 
 		return new ComparableItemStackValidated(stack, oreValidator);
 	}
-
+	
 	public static boolean isFood(ItemStack input) {
 
 		if (input.isEmpty()) {
@@ -181,16 +187,102 @@ public class FurnaceManager {
 		}
 		ComparableItemStackValidated query = convertInput(input);
 
-		if (foodSet.contains(query)) {
-			return true;
+		if(foodOverrideMap.containsKey(query)) {
+			return foodOverrideMap.get(query);
 		}
+		
+		// Store because the entire wildcard could be blacklisted.
+		boolean defaultReturn = foodSet.contains(query);
 		query.metadata = OreDictionary.WILDCARD_VALUE;
-		return foodSet.contains(query);
+		
+		if(foodOverrideMap.containsKey(query)) {
+			return foodOverrideMap.get(query);
+		}
+		
+		return defaultReturn || foodSet.contains(query);
 	}
 
 	public static boolean isOre(ItemStack stack) {
-
+		ComparableItemStack query = new ComparableItemStack(stack);
+		if(oreOverrideMap.containsKey(query)) return oreOverrideMap.get(query);
+		query.metadata = OreDictionary.WILDCARD_VALUE;
+		if(oreOverrideMap.containsKey(query)) return oreOverrideMap.get(query);
+		
 		return ItemHelper.isOre(stack) || ItemHelper.isCluster(stack);
+	}
+	
+	/* ORE OVERRIDES */
+
+	@Nullable
+	/**
+	 * Adds an override for an {@code ItemStack} to be in the set of foods accepted by the Trivection Chamber
+	 * @param stack	The {@code ItemStack} to add the override for. Can use {@link OreDictionary.WILDCARD_VALUE wildcard metadata}.
+	 * @param value The override value
+	 * @return The previous value associated with {@code stack}, or {@code null} if there was no mapping for {@code stack}.
+	 * @see Map#put(Object, Object)
+	 */
+	public static Boolean addFoodOverride(ItemStack stack, boolean value) {
+		ComparableItemStackValidated query = convertInput(stack);
+		return foodOverrideMap.put(query, value);
+	}
+
+	@Nullable
+	/**
+	 * Removes the override for an {@code ItemStack} in the set of foods accepted by the Trivection Chamber
+	 * @param stack	The {@code ItemStack} to remove the override for. Can use {@link OreDictionary.WILDCARD_VALUE wildcard metadata}.
+	 * @return Whether the remove operation was successful.
+	 * @see Map#remove(Object, Object)
+	 */
+	public static Boolean removeFoodOverride(ItemStack stack) {
+		ComparableItemStackValidated query = convertInput(stack);
+		return foodOverrideMap.remove(query);
+	}
+
+	/**
+	 * Checks if there is any override for an {@code ItemStack} for the Trivection Chamber
+	 * @param stack	The {@code ItemStack} to remove the override for. Can use {@link OreDictionary.WILDCARD_VALUE wildcard metadata}.
+	 * @return {@code true} if there is an override for {@code stack}.
+	 * @see Map#containsKey(Object, Object)
+	 */
+	public static boolean hasFoodOverride(ItemStack stack) {
+		ComparableItemStackValidated query = convertInput(stack);
+		return foodOverrideMap.containsKey(query);
+	}
+
+	@Nullable
+	/**
+	 * Adds an override for an {@code ItemStack} to be in the set of ores accepted by the Flux Anodizer
+	 * @param stack	The {@code ItemStack} to add the override for. Can use {@link OreDictionary.WILDCARD_VALUE wildcard metadata}.
+	 * @param value The override value
+	 * @return The previous value associated with {@code stack}, or {@code null} if there was no mapping for {@code stack}.
+	 * @see Map#put(Object, Object)
+	 */
+	public static Boolean addOreOverride(ItemStack stack, boolean value) {
+		ComparableItemStack query = new ComparableItemStack(stack);
+		return oreOverrideMap.put(query, value);
+	}
+
+	@Nullable
+	/**
+	 * Removes the override for an {@code ItemStack} in the set of ores accepted by the Flux Anodizer
+	 * @param stack	The {@code ItemStack} to remove the override for. Can use {@link OreDictionary.WILDCARD_VALUE wildcard metadata}.
+	 * @return Whether the remove operation was successful.
+	 * @see Map#remove(Object, Object)
+	 */
+	public static Boolean removeOreOverride(ItemStack stack) {
+		ComparableItemStack query = new ComparableItemStack(stack);
+		return oreOverrideMap.remove(query);
+	}
+
+	/**
+	 * Checks if there is any override for an {@code ItemStack} for the Flux Anodizer
+	 * @param stack	The {@code ItemStack} to remove the override for. Can use {@link OreDictionary.WILDCARD_VALUE wildcard metadata}.
+	 * @return {@code true} if there is an override for {@code stack}.
+	 * @see Map#containsKey(Object, Object)
+	 */
+	public static boolean hasOreOverride(ItemStack stack) {
+		ComparableItemStack query = new ComparableItemStack(stack);
+		return oreOverrideMap.containsKey(query);
 	}
 
 	/* RECIPE CLASS */
